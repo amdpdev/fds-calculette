@@ -170,3 +170,79 @@ test("table coefficient ↔ marge", () => {
   assert.equal(t[41].coef, 3);
   assert.equal(C.pct(t[42].marge), "75,0 %");
 });
+
+// ── Chaîne ACHAT : tarif + remise fournisseur → prix d'achat (ajoutée le 19/10/2026, v2) ─────────────
+// Les trois parcours demandés par Franck : (1) tarif + remise fournisseur → PA ;
+// (2) tarif + remise client (avec le PA) → PV et marge restante ; (3) PA + marge → PV.
+const achat = (tarif, remF, pilote = "", saisie = "") =>
+  C.calculer({ tarif, achatPilote: "remF", remF, pa: "", pilote, saisie });
+
+test("parcours 1 : tarif 100 € − 40 % de remise fournisseur → prix d'achat 60,00 €", () => {
+  assert.equal(achat("100", "40").paN, 60);
+});
+
+test("parcours 1 : tarif 510 € − 15 % → prix d'achat 433,50 € (le PA de la fiche SOMECO)", () => {
+  assert.equal(achat("510", "15").paN, 433.5);
+});
+
+test("parcours 1 : le prix d'achat issu d'une remise est arrondi au centime", () => {
+  // 99,99 × (1 − 0,333) = 66,693 33… → 66,69
+  assert.equal(achat("99,99", "33,3").paN, 66.69);
+});
+
+test("parcours 1 : remise de 0 % permise (prix d'achat = tarif)", () => {
+  assert.equal(achat("100", "0").paN, 100);
+});
+
+test("parcours 1 : sans tarif, ou sans remise, ou remise de 100 % : pas de prix d'achat, et on dit pourquoi", () => {
+  assert.match(achat("", "40").manqueAchat, /tarif/i);
+  assert.match(achat("100", "").manqueAchat, /remise fournisseur/i);
+  assert.match(achat("100", "100").manqueAchat, /100 %/);
+  assert.match(achat("100", "-5").manqueAchat, /négative/);
+  for (const r of [achat("", "40"), achat("100", ""), achat("100", "100"), achat("100", "-5")]) assert.equal(r.paN, null);
+});
+
+test("parcours 2 : tarif 100, remise fournisseur 40 % (PA 60) puis remise client 20 % → PV 80 €, marge 25 %", () => {
+  const r = achat("100", "40", "remise", "20");
+  assert.equal(r.paN, 60);
+  assert.equal(r.pvC, 80);
+  assert.equal(r.marge, 0.25);
+  assert.equal(r.gain, 20);
+});
+
+test("parcours 2 avec un prix d'achat saisi : tarif 100, PA 60, remise client 20 % → PV 80 €, marge 25 %", () => {
+  const r = calc("60", "remise", "20", "100");
+  assert.equal(r.pvC, 80);
+  assert.equal(r.marge, 0.25);
+});
+
+test("parcours 3 : prix d'achat + marge → prix de vente (7,71 € à 40 % → 12,85 €), sans tarif", () => {
+  const r = calc("7,71", "marge", "40");
+  assert.equal(r.pvC, 12.85);
+  assert.equal(r.manqueAchat, null);
+});
+
+test("remise fournisseur équivalente d'un prix d'achat saisi : tarif 100, PA 60 → 40 %", () => {
+  const r = calc("60", "marge", "25", "100");
+  assert.ok(Math.abs(r.remFEq - 0.4) < 1e-12);
+  assert.equal(calc("60", "marge", "25", "").remFEq, null);      // sans tarif : pas de remise à lire
+  assert.ok(calc("120", "marge", "25", "100").remFEq < 0);       // prix d'achat au-dessus du tarif
+});
+
+test("tarif + remise client sans prix d'achat : le prix de vente se lit, la marge reste vide, avec son indice", () => {
+  const r = calc("", "remise", "20", "100");
+  assert.equal(r.pvC, 80);
+  assert.equal(r.marge, null);
+  assert.match(r.indice, /prix d'achat/);
+});
+
+test("la chaîne achat « remF » ne lit pas le texte du prix d'achat (et inversement)", () => {
+  const r = C.calculer({ tarif: "100", achatPilote: "remF", remF: "40", pa: "999", pilote: "marge", saisie: "25" });
+  assert.equal(r.paN, 60);
+  const r2 = C.calculer({ tarif: "100", achatPilote: "pa", remF: "40", pa: "50", pilote: "marge", saisie: "25" });
+  assert.equal(r2.paN, 50);
+});
+
+test("achatPilote absent : le prix d'achat saisi (compatibilité avec la v1)", () => {
+  assert.equal(C.calculer({ pa: "7,71", pilote: "coef", saisie: "1,5", tarif: "" }).paN, 7.71);
+});

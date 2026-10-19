@@ -9,7 +9,7 @@
  * dans app.js — sinon les appareils déjà installés continueront de servir l'ancienne version depuis
  * leur cache, sans aucun message d'erreur. `node --test` vérifie que les deux numéros concordent.
  */
-const CACHE_VERSION = 'fdscalc-v1';
+const CACHE_VERSION = 'fdscalc-v2';
 
 // Uniquement des ressources locales : aucune bibliothèque, aucun CDN, aucune police distante.
 const PRECACHE_URLS = [

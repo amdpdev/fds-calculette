@@ -10,7 +10,7 @@
 (function () {
   "use strict";
   const C = window.Calcul;
-  const VERSION = "1";
+  const VERSION = "2";
   const DATE_VERSION = "19/10/2026";
 
   const $ = id => document.getElementById(id);
@@ -29,37 +29,48 @@
   };
 
   // ── État : TOUT ce qui est saisi, en texte (comme dans les champs) ─────────────
+  // Calculateur : le tarif, puis deux chaînes. ACHAT : la remise fournisseur (`remF`) ou le prix d'achat (`pa`) est
+  // saisi, `achatPilote` dit lequel. VENTE : une seule des lignes pv / marge / coef / remise (remise CLIENT) est saisie,
+  // `pilote` dit laquelle et `saisie` en porte le texte.
   const etat = Object.assign({
-    pa: "", pilote: "coef", saisie: "", tarif: "", qte: "",      // calculateur
+    tarif: "", remF: "", pa: "", achatPilote: "pa",
+    pilote: "coef", saisie: "", qte: "",
     mDev: "EUR", mTexte: "",                                      // change : la ligne saisie et son montant
   }, session.lire() || {});
   etat.usd = memoire.lire("fdscalc_taux_usd", "1,17");            // dollars pour 1 €
   etat.gbp = memoire.lire("fdscalc_taux_gbp", "0,87");            // livres pour 1 € (valeur d'amorçage)
-  const sauver = () => session.ecrire({ pa: etat.pa, pilote: etat.pilote, saisie: etat.saisie, tarif: etat.tarif,
-    qte: etat.qte, mDev: etat.mDev, mTexte: etat.mTexte });
+  const sauver = () => session.ecrire({ tarif: etat.tarif, remF: etat.remF, pa: etat.pa, achatPilote: etat.achatPilote,
+    pilote: etat.pilote, saisie: etat.saisie, qte: etat.qte, mDev: etat.mDev, mTexte: etat.mTexte });
+  const entreesCalcul = () => ({ tarif: etat.tarif, achatPilote: etat.achatPilote, remF: etat.remF, pa: etat.pa,
+    pilote: etat.pilote, saisie: etat.saisie });
 
   // ── Fabrication des lignes ──────────────────────────────────────────────────
   // Une ligne de saisie : libellé, définition, étiquette d'état (« vous saisissez » / « calculé »), champ, unité.
-  function ligneHtml({ id, lib, def, unite, pm, cache }) {
-    return '<div class="ligne" id="l-' + id + '"' + (cache ? " hidden" : "") + ">"
+  function ligneHtml({ id, lib, def, unite }) {
+    return '<div class="ligne" id="l-' + id + '">'
       + '<div class="ligne-tete"><label for="' + id + '">' + lib + (def ? "<small>" + def + "</small>" : "") + "</label>"
       + '<span class="tag" id="t-' + id + '"></span></div>'
       + '<div class="champ"><input id="' + id + '" type="text" inputmode="decimal" enterkeyhint="done" autocomplete="off"'
       + ' autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="0">'
-      + (pm ? '<button type="button" class="pm" id="pm-' + id + '" aria-label="Changer le signe : marge négative">±</button>' : "")
       + (unite ? '<span class="unite">' + unite + "</span>" : "") + "</div></div>";
   }
-  // L'ordre est celui de l'onglet Calcul de marge de FDS Catalogue : prix de vente, marge, prix d'achat, coefficient, remise.
-  // Le tarif est facultatif ; il fait apparaître la ligne « Remise sur tarif » (dans FDS Catalogue, elle n'existe que
-  // lorsqu'on ouvre l'onglet depuis la fiche d'un article, qui porte son tarif).
-  $("lignes").innerHTML = [
-    { id: "pv",     lib: "Prix de vente HT",  def: "ce que vous facturez",   unite: "€" },
-    { id: "marge",  lib: "Marge",             def: "(vente − achat) ÷ vente", unite: "%", pm: true },
-    { id: "pa",     lib: "Prix d'achat HT",   def: "ce que vous payez",      unite: "€" },
-    { id: "coef",   lib: "Coefficient",       def: "vente ÷ achat" },
-    { id: "tarif",  lib: "Tarif catalogue",   def: "facultatif",             unite: "€" },
-    { id: "remise", lib: "Remise sur tarif",  def: "vente = tarif − remise", unite: "%", cache: true },
-  ].map(ligneHtml).join("");
+  // Un titre de groupe, dans le cadre jaune : il dit ce que fait le groupe et ce qu'on y saisit.
+  const groupe = (titre, aide) => '<div class="groupe"><b>' + titre + "</b>" + (aide ? "<span>" + aide + "</span>" : "") + "</div>";
+  // L'organisation suit le raisonnement, de haut en bas : le TARIF, puis l'ACHAT (ce que l'on paie), puis la VENTE
+  // (ce que l'on facture). Dans l'achat et dans la vente, on saisit UNE seule ligne, les autres se calculent — comme dans
+  // l'onglet Calcul de marge de FDS Catalogue. Le tarif sert aux deux remises : la remise fournisseur donne le prix
+  // d'achat, la remise client donne le prix de vente.
+  $("lignes").innerHTML =
+    groupe("Tarif", "Le tarif du fournisseur. Il sert aux deux remises ; inutile si vous partez du prix d'achat.")
+    + ligneHtml({ id: "tarif", lib: "Tarif catalogue", def: "", unite: "€" })
+    + groupe("Achat · ce que vous payez", "Saisissez la remise fournisseur OU le prix d'achat.")
+    + ligneHtml({ id: "remF", lib: "Remise fournisseur", def: "achat = tarif − remise", unite: "%" })
+    + ligneHtml({ id: "pa", lib: "Prix d'achat HT", def: "", unite: "€" })
+    + groupe("Vente · ce que vous facturez", "Saisissez UNE seule ligne : marge, coefficient, remise client ou prix de vente.")
+    + ligneHtml({ id: "marge", lib: "Marge", def: "(vente − achat) ÷ vente", unite: "%" })
+    + ligneHtml({ id: "coef", lib: "Coefficient", def: "vente ÷ achat" })
+    + ligneHtml({ id: "remise", lib: "Remise client", def: "vente = tarif − remise", unite: "%" })
+    + ligneHtml({ id: "pv", lib: "Prix de vente HT", def: "", unite: "€" });
   $("ligne-qte").innerHTML = ligneHtml({ id: "qte", lib: "Quantité", def: "" });
   $("lignes-montant").innerHTML = [
     { id: "mEUR", lib: "Montant en euros",   def: "", unite: "€" },
@@ -99,34 +110,44 @@
 
   function render() {
     // 1. Calculateur
-    const r = C.calculer({ pa: etat.pa, pilote: etat.pilote, saisie: etat.saisie, tarif: etat.tarif });
-    // La ligne qui pilote montre le texte saisi tel quel ; les autres, la valeur calculée.
-    const montre = (id, calcule) => poser(id, etat.pilote === id ? etat.saisie : calcule);
-    montre("pv", C.ecrirePrix(r.pvC));
-    montre("marge", C.ecrire(r.marge === null ? null : r.marge * 100, 2));
-    montre("coef", C.ecrire(r.coef, 4));
-    montre("remise", C.ecrire(r.remiseEq === null ? null : r.remiseEq * 100, 2));
-    poser("pa", etat.pa); poser("tarif", etat.tarif); poser("qte", etat.qte);
-    ["pv", "marge", "coef", "remise"].forEach(id => etiquette(id, etat.pilote === id, etat.pilote === id ? "✎ vous saisissez" : "calculé"));
-    etiquette("pa", true, "✎ à renseigner");
-    etiquette("tarif", false, "");
-    etiquette("qte", true, "✎ à renseigner");
-    $("l-remise").hidden = !r.baseOk;
+    const r = C.calculer(entreesCalcul());
+    // Une ligne qui pilote montre le texte saisi tel quel ; les autres, la valeur calculée.
+    const vente = (id, calcule) => poser(id, etat.pilote === id ? etat.saisie : calcule);
+    vente("pv", C.ecrirePrix(r.pvC));
+    vente("marge", C.ecrire(r.marge === null ? null : r.marge * 100, 2));
+    vente("coef", C.ecrire(r.coef, 4));
+    vente("remise", C.ecrire(r.remiseEq === null ? null : r.remiseEq * 100, 2));
+    const parRemF = etat.achatPilote === "remF";
+    poser("remF", parRemF ? etat.remF : C.ecrire(r.remFEq === null ? null : r.remFEq * 100, 2));
+    poser("pa", parRemF ? C.ecrirePrix(r.paN) : etat.pa);
+    poser("tarif", etat.tarif); poser("qte", etat.qte);
 
-    // Résultats : le cadre vert, collé en haut
+    // Étiquettes. Une remise qui sort négative n'est pas une erreur : c'est un prix au-dessus du tarif, on le dit.
+    const calcule = (neg, negTexte) => neg ? "calculé · " + negTexte : "calculé";
+    ["pv", "marge", "coef"].forEach(id => etiquette(id, etat.pilote === id, etat.pilote === id ? "✎ vous saisissez" : "calculé"));
+    etiquette("remise", etat.pilote === "remise",
+      etat.pilote === "remise" ? "✎ vous saisissez"
+        : !r.baseOk ? "tarif à renseigner" : calcule(r.remiseEq !== null && r.remiseEq < 0, "majoration"));
+    etiquette("remF", parRemF, parRemF ? "✎ vous saisissez"
+      : !r.baseOk ? "tarif à renseigner" : calcule(r.remFEq !== null && r.remFEq < 0, "achat au-dessus du tarif"));
+    etiquette("pa", !parRemF, !parRemF ? "✎ vous saisissez" : "calculé");
+    // Le tarif est à renseigner dès qu'une remise pilote ; sinon il est facultatif.
+    const tarifRequis = parRemF || etat.pilote === "remise";
+    etiquette("tarif", tarifRequis, tarifRequis ? "✎ à renseigner" : "facultatif");
+    etiquette("qte", true, "✎ à renseigner");
+
+    // Résultats : le cadre vert, collé en haut. Prix d'achat et prix de vente, les deux bouts de la chaîne.
+    $("r-pa").textContent = r.paN === null ? "—" : C.euros(r.paN) + " €";
     $("r-pv").textContent = r.pvC === null ? "—" : C.euros(r.pvC) + " €";
     $("r-marge").textContent = C.pct(r.marge);
     $("r-gain").textContent = r.gain === null ? "—" : C.euros(r.gain) + " €";
-    $("r-remise-bloc").hidden = !r.baseOk;
-    if (r.baseOk) {
-      const majoration = r.remiseEq !== null && r.remiseEq < 0;     // le prix dépasse le tarif
-      $("r-remise").textContent = r.remiseEq === null ? "—" : majoration ? "+" + C.pct(-r.remiseEq) : C.pct(r.remiseEq);
-      $("r-remise-note").textContent = majoration ? "majoration" : "";
-    }
 
-    // Ce qui manque, dit en clair plutôt que des tirets muets. Rien de saisi : ton neutre, pas d'alerte.
+    // Ce qui manque, dit en clair plutôt que des tirets muets. L'achat d'abord (la vente en dépend). Rien de saisi : ton neutre, pas d'alerte.
+    const rienSaisi = etat.tarif === "" && etat.pa === "" && etat.remF === "" && etat.saisie === "";
     if (r.margeImpossible) message("Une marge de 100 % ou plus est impossible : le prix de vente serait infini.", "erreur");
-    else if (r.manque) message(r.manque, etat.pa === "" && etat.saisie === "" ? "" : "alerte");
+    else if (r.manqueAchat) message(r.manqueAchat, rienSaisi || (etat.remF === "" && etat.tarif === "") ? "" : "alerte");
+    else if (r.manque) message(r.manque, rienSaisi ? "" : "alerte");
+    else if (r.indice) message(r.indice, "");
     else message("Attention : un coefficient de 1,50 donne une marge de 33,3 %, pas de 50 %.", "");
 
     // Sur une quantité
@@ -156,8 +177,8 @@
 
   // Le cadre vert reste collé en haut de la zone qui défile. Quand le navigateur fait défiler pour amener un
   // champ à l'écran (touche d'un champ, clavier qui s'ouvre), il l'amène au bord haut — SOUS ce cadre, qui le
-  // cacherait. `scroll-padding-top` lui dit de s'arrêter plus bas. La hauteur varie (ligne « remise » en plus,
-  // écran Change), donc on la mesure au lieu de la supposer.
+  // cacherait. `scroll-padding-top` lui dit de s'arrêter plus bas. La hauteur varie (écran Marge ou Change,
+  // largeur de l'écran), donc on la mesure au lieu de la supposer.
   function margeHaute() {
     const collant = document.querySelector(".ecran:not([hidden]) .collant");
     $("zone").style.scrollPaddingTop = collant ? collant.offsetHeight + 24 + "px" : "";
@@ -177,12 +198,10 @@
     const el = e.target;
     if (el.tagName !== "INPUT") return;
     const id = el.id, v = el.value;
-    if (id === "pa") etat.pa = v;
-    else if (id === "tarif") {
-      etat.tarif = v;
-      // La ligne « remise » n'a plus de tarif sur lequel s'appliquer : c'est le coefficient qui reprend la main.
-      if (!(C.lire(v) > 0) && etat.pilote === "remise") { etat.pilote = "coef"; etat.saisie = ""; }
-    }
+    // Chaîne ACHAT : la dernière des deux lignes saisies (remise fournisseur, prix d'achat) pilote l'autre.
+    if (id === "pa") { etat.achatPilote = "pa"; etat.pa = v; }
+    else if (id === "remF") { etat.achatPilote = "remF"; etat.remF = v; }
+    else if (id === "tarif") etat.tarif = v;
     else if (id === "qte") etat.qte = v;
     else if (id === "mEUR" || id === "mUSD" || id === "mGBP") { etat.mDev = id.slice(1); etat.mTexte = v; }
     else if (id === "usd") { etat.usd = v; memoire.ecrire("fdscalc_taux_usd", v); }
@@ -191,18 +210,9 @@
     render(); sauver();
   });
 
-  // « ± » : le clavier décimal de l'iPhone n'a pas de signe moins, or une marge négative est possible
-  // (vente sous le prix d'achat). Le bouton bascule le signe de la marge, saisie ou calculée.
-  $("pm-marge").addEventListener("click", () => {
-    const r = C.calculer({ pa: etat.pa, pilote: etat.pilote, saisie: etat.saisie, tarif: etat.tarif });
-    const v = etat.pilote === "marge" ? etat.saisie : C.ecrire(r.marge === null ? null : r.marge * 100, 2);
-    etat.pilote = "marge";
-    etat.saisie = v === "" ? "-" : v.charAt(0) === "-" ? v.slice(1) : "-" + v;
-    render(); sauver();
-  });
-
   $("effacer").addEventListener("click", () => {
-    etat.pa = ""; etat.pilote = "coef"; etat.saisie = ""; etat.tarif = ""; etat.qte = ""; etat.mDev = "EUR"; etat.mTexte = "";
+    etat.tarif = ""; etat.remF = ""; etat.pa = ""; etat.achatPilote = "pa";
+    etat.pilote = "coef"; etat.saisie = ""; etat.qte = ""; etat.mDev = "EUR"; etat.mTexte = "";
     render(); sauver();
     $("zone").scrollTop = 0;
   });

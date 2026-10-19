@@ -41,13 +41,40 @@
     : (n * 100).toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 2 }) + " %";
 
   // ── 1. Calculateur ─────────────────────────────────────────────────────────
-  // Le prix d'achat est fixe. Parmi les lignes prix de vente, marge, coefficient et remise
-  // sur tarif, c'est la DERNIÈRE saisie (`pilote`) qui pilote les autres : aucun bouton « calculer ».
-  //   e = { pa, pilote: "pv"|"marge"|"coef"|"remise", saisie, tarif }  — tous des TEXTES saisis.
+  // Deux chaînes, qui partagent le même TARIF, et dans chacune la DERNIÈRE saisie pilote les autres lignes
+  // (aucun bouton « calculer ») :
+  //   ACHAT (`achatPilote`) : « pa » (le prix d'achat est saisi) ou « remF » (la remise fournisseur est saisie
+  //                           et le prix d'achat en découle : PA = tarif − remise). Le prix d'achat sort de cette chaîne.
+  //   VENTE (`pilote`)      : « pv », « marge », « coef » ou « remise » (remise CLIENT : vente = tarif − remise).
+  //                           Part du prix d'achat que la chaîne ACHAT a produit.
+  // D'où les trois parcours : tarif + remise fournisseur → prix d'achat ; tarif + remise client (avec le prix
+  // d'achat) → prix de vente et marge restante ; prix d'achat + marge → prix de vente. Ils s'enchaînent.
+  //   e = { tarif, achatPilote: "pa"|"remF" (« pa » si absent), pa, remF,
+  //         pilote: "pv"|"marge"|"coef"|"remise", saisie }  — tous des TEXTES saisis.
   function calculer(e) {
     const pilote = e.pilote;
-    const paN = lire(e.pa), x = lire(e.saisie), tarifN = lire(e.tarif);
+    const x = lire(e.saisie), tarifN = lire(e.tarif);
     const baseOk = tarifN !== null && tarifN > 0;
+
+    // ── Chaîne ACHAT ──
+    // Le prix d'achat issu d'une remise est arrondi au centime, comme tout prix : le gain et la marge
+    // partent de CE prix (433,50 € et non 433,5000000001 €).
+    const achatParRemise = e.achatPilote === "remF";
+    const remFN = lire(e.remF);
+    let paN = null, manqueAchat = null, remFEq = null;
+    if (achatParRemise) {
+      if (!baseOk) manqueAchat = "Renseignez le tarif pour calculer le prix d'achat.";
+      else if (remFN === null) manqueAchat = "Renseignez la remise fournisseur.";
+      else if (remFN >= 100) manqueAchat = "Une remise de 100 % ou plus est impossible : le prix d'achat serait nul.";
+      else if (remFN < 0) manqueAchat = "Une remise fournisseur ne peut pas être négative.";
+      else paN = Math.round(tarifN * (1 - remFN / 100) * 100) / 100;
+    } else {
+      paN = lire(e.pa);
+      // Remise qui, appliquée au tarif, redonne ce prix d'achat (négative = prix d'achat au-dessus du tarif).
+      if (baseOk && paN !== null) remFEq = 1 - paN / tarifN;
+    }
+
+    // ── Chaîne VENTE ──
     let pv = null, coef = null, marge = null;     // marge en fraction : 0,4 = 40 %
 
     // Du prix de vente, on déduit coefficient et marge dès que le prix d'achat est là.
@@ -80,8 +107,10 @@
       else if (pilote === "remise" && !baseOk) manque = "Renseignez le tarif pour calculer une remise.";
     }
     const margeImpossible = pilote === "marge" && x !== null && x >= 100;
+    // Un prix de vente connu sans prix d'achat : on le lit, mais on dit pourquoi la marge reste vide.
+    const indice = (pv !== null && paN === null && !manqueAchat) ? "Renseignez le prix d'achat pour voir la marge." : null;
 
-    return { paN, x, tarifN, baseOk, pv, pvC, coef, marge, gain, remiseEq, manque, margeImpossible };
+    return { paN, x, tarifN, baseOk, pv, pvC, coef, marge, gain, remiseEq, remFEq, manque, manqueAchat, indice, margeImpossible };
   }
 
   // ── 1 bis. Sur une quantité ────────────────────────────────────────────────

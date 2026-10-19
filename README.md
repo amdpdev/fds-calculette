@@ -7,7 +7,7 @@ Elle reprend l'onglet « Calcul de marge » de FDS Catalogue (AMDP).
 
 ## Ce qu'elle fait
 
-- **Marge** : prix de vente, marge, prix d'achat, coefficient et remise sur tarif. Une seule ligne se saisit, les autres se calculent. Estimation du chiffre d'affaires et de la marge totale sur une quantité.
+- **Marge**, en trois groupes qui suivent le raisonnement : le **tarif**, puis l'**achat** (remise fournisseur ou prix d'achat), puis la **vente** (marge, coefficient, remise client ou prix de vente). Dans l'achat et dans la vente, une seule ligne se saisit, les autres se calculent. Trois parcours : tarif + remise fournisseur → prix d'achat ; tarif + remise client (avec le prix d'achat) → prix de vente et marge restante ; prix d'achat + marge → prix de vente. Estimation du chiffre d'affaires et de la marge totale sur une quantité.
 - **Change** : conversion euro, dollar, livre sterling, avec des taux que l'on saisit soi-même.
 - **Table** : coefficient à appliquer pour obtenir telle marge.
 

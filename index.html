@@ -92,14 +92,22 @@ main{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
 
 /* Le résultat principal, collé sous l'en-tête pendant qu'on défile et qu'on tape */
 .collant{position:sticky;top:0;z-index:5;margin:0 -2px;box-shadow:0 6px 10px -8px rgba(0,0,0,.35)}
-.grand{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
-.grand small{font-size:13px;color:var(--doux);font-weight:500}
-.grand b{font-size:28px;font-weight:750;color:var(--vert-texte);white-space:nowrap}
+/* Les deux bouts de la chaîne : ce que l'on paie, ce que l'on facture */
+.duo{display:flex;justify-content:space-between;gap:12px}
+.duo>div{min-width:0}
+.duo>div:last-child{text-align:right}
+.duo small{display:block;font-size:12px;color:var(--doux);font-weight:500}
+.duo b{font-size:24px;font-weight:750;color:var(--vert-texte);white-space:nowrap}
 .petits{display:flex;gap:6px 16px;flex-wrap:wrap;margin-top:6px;padding-top:7px;border-top:1px solid var(--vert-bord)}
 .petits div{min-width:0}
 .petits small{display:block;font-size:11.5px;color:var(--doux)}
 .petits b{font-size:16px;font-weight:700;white-space:nowrap}
-.petits .note{font-weight:500;font-size:11px;color:var(--doux)}
+
+/* Titre d'un groupe de lignes dans le cadre jaune : Tarif, Achat, Vente */
+.groupe{display:flex;flex-direction:column;gap:1px;margin-top:8px;padding-top:10px;border-top:1px solid var(--jaune-bord)}
+.groupe:first-child{margin-top:0;padding-top:0;border-top:none}
+.groupe b{font-size:13px;font-weight:700;color:var(--jaune-texte);text-transform:uppercase;letter-spacing:.05em}
+.groupe span{font-size:12.5px;color:var(--doux)}
 
 /* Une ligne résultat */
 .res{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--vert-bord)}
@@ -115,7 +123,7 @@ main{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
 .ligne-tete{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;flex-wrap:wrap}
 .ligne-tete label{font-size:14px;font-weight:650}
 .ligne-tete label small{font-size:11.5px;font-weight:400;color:var(--doux);margin-left:6px}
-.tag{font-size:11px;font-weight:700;color:var(--doux);white-space:nowrap}
+.tag{font-size:11px;font-weight:700;color:var(--doux);white-space:nowrap;margin-left:auto}
 .ligne.actif .tag{color:var(--jaune-texte)}
 .champ{display:flex;align-items:center;gap:8px}
 .champ input{
@@ -126,8 +134,6 @@ main{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
 .champ input:focus{outline:2px solid var(--jaune);outline-offset:1px}
 .champ input::placeholder{color:var(--doux);opacity:.6}
 .unite{min-width:20px;color:var(--doux);font-size:15px;white-space:nowrap}
-.pm{width:46px;height:46px;border-radius:9px;border:1px solid var(--bord);background:var(--carte2);font-size:18px;font-weight:700;flex:none}
-.pm:active{background:var(--bord)}
 .message{font-size:12.5px;margin-top:10px;color:var(--doux);line-height:1.5}
 .message.alerte{color:var(--jaune-texte);font-weight:600}
 .message.erreur{color:var(--rouge);font-weight:600}
@@ -191,19 +197,18 @@ main{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
   <!-- ═══ 1. MARGE ═══ -->
   <section class="ecran" id="ecran-marge" role="tabpanel" aria-labelledby="onglet-marge">
     <div class="panneau vert collant" aria-live="polite">
-      <div class="grand"><small>Prix de vente HT</small><b id="r-pv">—</b></div>
+      <div class="duo">
+        <div><small>Prix d'achat HT</small><b id="r-pa">—</b></div>
+        <div><small>Prix de vente HT</small><b id="r-pv">—</b></div>
+      </div>
       <div class="petits">
         <div><small>Marge</small><b id="r-marge">—</b></div>
         <div><small>Gain par article</small><b id="r-gain">—</b></div>
-        <div id="r-remise-bloc" hidden><small>Remise sur tarif</small><b id="r-remise">—</b> <span class="note" id="r-remise-note"></span></div>
       </div>
     </div>
 
     <div class="panneau jaune" style="margin-top:12px">
       <h2>✎ Vous renseignez</h2>
-      <p class="message" style="margin:-2px 0 10px;color:var(--texte);font-weight:600">
-        Le prix d'achat et UNE seule des autres lignes : les autres se calculent seules.
-      </p>
       <div class="pile" id="lignes"></div>
       <p class="message" id="message"></p>
     </div>
@@ -273,10 +278,20 @@ main{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
       </p>
       <ul>
         <li><b>Cadre jaune</b> : ce que vous renseignez. <b>Cadre vert</b> : le résultat, rien à saisir.</li>
-        <li>La ligne que vous tapez pilote les autres ; une ligne « calculé » reprend la main dès que vous y tapez.</li>
-        <li>« ± » donne une marge négative (vente sous le prix d'achat).</li>
-        <li>Renseignez un <b>tarif</b> pour faire apparaître la ligne « Remise sur tarif » : la remise à appliquer au tarif pour obtenir ce prix de vente (un « + » indique une majoration).</li>
+        <li>Dans l'<b>achat</b> comme dans la <b>vente</b>, la dernière ligne que vous tapez pilote les autres ; une ligne « calculé » reprend la main dès que vous y tapez.</li>
+        <li>Une remise « calculé · majoration » signifie que le prix est au-dessus du tarif.</li>
       </ul>
+    </div>
+
+    <div class="carte">
+      <h2>Trois façons de s'en servir</h2>
+      <p>La remise fournisseur donne le prix d'achat ; la remise client donne le prix de vente. Les deux partent du même tarif.</p>
+      <ol>
+        <li><b>Tarif + remise fournisseur</b> → le prix d'achat.</li>
+        <li><b>Tarif + remise client</b>, avec le prix d'achat → le prix de vente et la marge restante.</li>
+        <li><b>Prix d'achat + marge</b> (ou coefficient) → le prix de vente. Aucun tarif nécessaire.</li>
+      </ol>
+      <p class="def" style="margin-top:8px">On peut tout enchaîner : le tarif, la remise fournisseur, puis la remise client donnent d'un coup le prix d'achat, le prix de vente et la marge.</p>
     </div>
 
     <div class="carte">
