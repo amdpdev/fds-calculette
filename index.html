@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2c6ebe">
+<meta name="description" content="FDS Calculette : prix de vente, marge, coefficient, remise et conversion euro, dollar, livre. Fonctionne sans réseau.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FDS Calculette">
+<title>FDS Calculette</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icone.svg">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<script>
+// Le thème est posé AVANT le premier affichage : sans cela, un téléphone en mode nuit montrerait un éclair blanc.
+// Choix explicite (bouton ☀/☾) retenu ; sinon on suit le réglage du téléphone. localStorage peut lever une
+// exception (navigation privée, données de site bloquées) : on essaie, et si ça ne marche pas, tant pis.
+(function () {
+  var choix = null;
+  try { choix = localStorage.getItem("fdscalc_theme"); } catch (e) {}
+  var sombre = choix ? choix === "sombre" : window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.setAttribute("data-theme", sombre ? "sombre" : "clair");
+})();
+</script>
+<style>
+:root{
+  --bleu:#2c6ebe;
+  --fond:#f5f6fa; --carte:#ffffff; --carte2:#f0f1f5; --bord:#d0d5dd;
+  --texte:#1a1d23; --doux:#5b6472;
+  --jaune:#d48800; --jaune-texte:#8f5c00; --jaune-fond:rgba(212,136,0,.10); --jaune-bord:rgba(212,136,0,.45);
+  --vert:#16a34a;  --vert-texte:#15803d;  --vert-fond:rgba(22,163,74,.10);  --vert-bord:rgba(22,163,74,.45);
+  --rouge:#c81e1e;
+  color-scheme:light;
+}
+:root[data-theme="sombre"]{
+  --fond:#0d1117; --carte:#161b22; --carte2:#1c2128; --bord:#30363d;
+  --texte:#e6edf3; --doux:#8b949e;
+  --jaune:#f0a500; --jaune-texte:#f0a500; --jaune-fond:rgba(240,165,0,.10); --jaune-bord:rgba(240,165,0,.45);
+  --vert:#3fb950;  --vert-texte:#3fb950;  --vert-fond:rgba(63,185,80,.10);  --vert-bord:rgba(63,185,80,.45);
+  --rouge:#f85149;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+/* Safari grossit de lui-même le texte de certains blocs, ce qui décale toute la mise en page.
+   Ceci désactive l'agrandissement AUTOMATIQUE ; la taille choisie dans iOS, elle, continue de s'appliquer. */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+html,body{height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+  font-size:15px;line-height:1.4;background:var(--fond);color:var(--texte);
+  display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden;
+  overscroll-behavior:none;font-variant-numeric:tabular-nums;
+}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;border:none;background:none;touch-action:manipulation}
+[hidden]{display:none!important}
+
+/* ── En-tête : bleu du logo dans les deux thèmes, sous l'heure et la batterie en plein écran ── */
+.entete{
+  flex:none;display:flex;align-items:center;gap:10px;background:var(--bleu);color:#fff;
+  padding:calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 14px) 8px calc(env(safe-area-inset-left) + 14px);
+}
+.entete img{width:32px;height:32px;border-radius:8px;flex:none;display:block}
+.entete h1{font-size:18px;font-weight:700;letter-spacing:.2px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.entete button{width:40px;height:40px;border-radius:10px;color:#fff;font-size:20px;line-height:1;background:rgba(255,255,255,.16)}
+.entete button:active{background:rgba(255,255,255,.3)}
+
+/* Bandeau « mise à jour prête » : l'application l'annonce elle-même */
+.maj{flex:none;display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--jaune-fond);
+  border-bottom:1px solid var(--jaune-bord);font-size:13.5px}
+.maj span{flex:1}
+.maj button{padding:8px 14px;border-radius:8px;background:var(--bleu);color:#fff;font-weight:600}
+
+/* ── Zone qui défile : le résultat reste collé en haut, visible même clavier ouvert ── */
+main{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:0 calc(env(safe-area-inset-right) + 12px) 24px calc(env(safe-area-inset-left) + 12px)}
+.ecran{max-width:560px;margin:0 auto;padding-top:12px}
+
+/* ── Panneaux : JAUNE = ce que l'on renseigne, VERT = ce qui se calcule seul ── */
+.panneau{border-radius:12px;padding:12px 14px;border:1px solid}
+.panneau>h2{font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;font-weight:700;margin-bottom:10px}
+.jaune{background:var(--jaune-fond);border-color:var(--jaune-bord)}
+.jaune>h2{color:var(--jaune-texte)}
+.vert{background:linear-gradient(var(--vert-fond),var(--vert-fond)),var(--carte);border-color:var(--vert-bord)}
+.vert>h2{color:var(--vert-texte)}
+.pile{display:flex;flex-direction:column;gap:10px}
+.carte{background:var(--carte);border:1px solid var(--bord);border-radius:12px;padding:14px;margin-top:12px}
+.carte>h2{font-size:16px;font-weight:650;margin-bottom:4px}
+.carte>p{font-size:13px;color:var(--doux);margin-bottom:12px}
+
+/* Le résultat principal, collé sous l'en-tête pendant qu'on défile et qu'on tape */
+.collant{position:sticky;top:0;z-index:5;margin:0 -2px;box-shadow:0 6px 10px -8px rgba(0,0,0,.35)}
+.grand{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.grand small{font-size:13px;color:var(--doux);font-weight:500}
+.grand b{font-size:28px;font-weight:750;color:var(--vert-texte);white-space:nowrap}
+.petits{display:flex;gap:6px 16px;flex-wrap:wrap;margin-top:6px;padding-top:7px;border-top:1px solid var(--vert-bord)}
+.petits div{min-width:0}
+.petits small{display:block;font-size:11.5px;color:var(--doux)}
+.petits b{font-size:16px;font-weight:700;white-space:nowrap}
+.petits .note{font-weight:500;font-size:11px;color:var(--doux)}
+
+/* Une ligne résultat */
+.res{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--vert-bord)}
+.res:last-child{border-bottom:none}
+.res small{display:block;font-size:11.5px;color:var(--doux)}
+.res .v{font-size:17px;font-weight:700;text-align:right;white-space:nowrap}
+.res.fort .v{font-size:22px;color:var(--vert-texte)}
+
+/* Une ligne à renseigner. Toutes sont modifiables ; celle que l'on vient de saisir est cernée de jaune,
+   les autres montrent la valeur déduite (« calculé ») et reprennent la main dès qu'on y tape. */
+.ligne{background:var(--carte);border-radius:10px;padding:9px 11px 11px;border:1px dashed var(--jaune-bord)}
+.ligne.actif{border:1.5px solid var(--jaune)}
+.ligne-tete{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+.ligne-tete label{font-size:14px;font-weight:650}
+.ligne-tete label small{font-size:11.5px;font-weight:400;color:var(--doux);margin-left:6px}
+.tag{font-size:11px;font-weight:700;color:var(--doux);white-space:nowrap}
+.ligne.actif .tag{color:var(--jaune-texte)}
+.champ{display:flex;align-items:center;gap:8px}
+.champ input{
+  flex:1;min-width:0;height:46px;padding:0 12px;border-radius:9px;font-size:18px;font-weight:500;
+  background:var(--carte2);border:1px solid var(--bord);-webkit-appearance:none;appearance:none;
+}
+.ligne.actif .champ input{background:var(--carte);border-color:var(--jaune);font-weight:700}
+.champ input:focus{outline:2px solid var(--jaune);outline-offset:1px}
+.champ input::placeholder{color:var(--doux);opacity:.6}
+.unite{min-width:20px;color:var(--doux);font-size:15px;white-space:nowrap}
+.pm{width:46px;height:46px;border-radius:9px;border:1px solid var(--bord);background:var(--carte2);font-size:18px;font-weight:700;flex:none}
+.pm:active{background:var(--bord)}
+.message{font-size:12.5px;margin-top:10px;color:var(--doux);line-height:1.5}
+.message.alerte{color:var(--jaune-texte);font-weight:600}
+.message.erreur{color:var(--rouge);font-weight:600}
+
+/* Lien « Taux du jour ↗ » */
+.lien{font-size:12px;font-weight:600;color:var(--bleu);text-decoration:none;white-space:nowrap;
+  padding:3px 10px;border-radius:7px;border:1px solid var(--bord);background:var(--carte2)}
+:root[data-theme="sombre"] .lien{color:#6cb0ff}
+.champ-taux .ligne-tete{align-items:center}
+.champ-taux .ligne-tete label{font-size:13.5px}
+
+.bouton{display:block;width:100%;height:46px;border-radius:10px;font-weight:650;border:1px solid var(--bord);background:var(--carte);margin-top:12px}
+.bouton.plein{background:var(--bleu);border-color:var(--bleu);color:#fff}
+.bouton:active{opacity:.7}
+
+/* Table coefficient ↔ marge */
+.table{border:1px solid var(--bord);border-radius:10px;overflow:hidden;background:var(--carte)}
+.table .tete,.table button{display:flex;justify-content:space-between;align-items:center;width:100%;padding:0 16px;min-height:44px}
+.table .tete{background:var(--carte2);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:var(--jaune-texte)}
+.table button{border-top:1px solid var(--bord);font-size:16px;text-align:left}
+.table button b{font-weight:650}
+.table button:active{background:var(--jaune-fond)}
+.table .rond{background:var(--carte2)}
+
+/* Infos */
+.carte ul,.carte ol{margin:6px 0 0 20px;font-size:14px}
+.carte li{margin:4px 0}
+.carte p+ul,.carte p+ol{margin-top:0}
+.def{font-size:14px;line-height:1.6}
+.def b{font-weight:650}
+.pied{margin:16px 0 4px;text-align:center;font-size:12px;color:var(--doux)}
+.pied a{color:inherit}
+
+/* ── Barre d'onglets du bas, au-dessus de la barre d'accueil de l'iPhone ── */
+.onglets{flex:none;display:flex;background:var(--carte);border-top:1px solid var(--bord);
+  padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.onglets button{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  min-height:56px;font-size:11.5px;font-weight:600;color:var(--doux)}
+.onglets button svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.onglets button[aria-selected="true"]{color:var(--bleu)}
+:root[data-theme="sombre"] .onglets button[aria-selected="true"]{color:#6cb0ff}
+
+@media (prefers-reduced-motion:no-preference){ .ligne,.champ input{transition:border-color .12s,background .12s} }
+</style>
+</head>
+<body>
+
+<header class="entete">
+  <img src="icone.svg" alt="" width="32" height="32">
+  <h1>FDS Calculette</h1>
+  <button id="theme" type="button" aria-label="Passer en mode nuit"></button>
+</header>
+
+<div class="maj" id="maj" hidden role="status">
+  <span>Une mise à jour est prête.</span>
+  <button id="majBtn" type="button">Installer</button>
+</div>
+
+<main id="zone">
+
+  <!-- ═══ 1. MARGE ═══ -->
+  <section class="ecran" id="ecran-marge" role="tabpanel" aria-labelledby="onglet-marge">
+    <div class="panneau vert collant" aria-live="polite">
+      <div class="grand"><small>Prix de vente HT</small><b id="r-pv">—</b></div>
+      <div class="petits">
+        <div><small>Marge</small><b id="r-marge">—</b></div>
+        <div><small>Gain par article</small><b id="r-gain">—</b></div>
+        <div id="r-remise-bloc" hidden><small>Remise sur tarif</small><b id="r-remise">—</b> <span class="note" id="r-remise-note"></span></div>
+      </div>
+    </div>
+
+    <div class="panneau jaune" style="margin-top:12px">
+      <h2>✎ Vous renseignez</h2>
+      <p class="message" style="margin:-2px 0 10px;color:var(--texte);font-weight:600">
+        Le prix d'achat et UNE seule des autres lignes : les autres se calculent seules.
+      </p>
+      <div class="pile" id="lignes"></div>
+      <p class="message" id="message"></p>
+    </div>
+
+    <div class="carte">
+      <h2>Sur une quantité</h2>
+      <p>Estime le chiffre d'affaires et la marge totale d'une commande, avec les prix ci-dessus.</p>
+      <div class="panneau jaune">
+        <h2>✎ Vous renseignez</h2>
+        <div class="pile" id="ligne-qte"></div>
+      </div>
+      <div class="panneau vert" style="margin-top:10px">
+        <h2>✓ Résultat · se calcule seul</h2>
+        <div class="res"><div>Chiffre d'affaires HT</div><div class="v" id="s-ca">—</div></div>
+        <div class="res"><div>Coût d'achat total</div><div class="v" id="s-cout">—</div></div>
+        <div class="res fort"><div>Marge totale<small>chiffre d'affaires − coût d'achat</small></div><div class="v" id="s-marge">—</div></div>
+      </div>
+    </div>
+
+    <button class="bouton" id="effacer" type="button">Tout effacer</button>
+    <p class="pied" id="pied-version"></p>
+  </section>
+
+  <!-- ═══ 2. CHANGE ═══ -->
+  <section class="ecran" id="ecran-change" role="tabpanel" aria-labelledby="onglet-change" hidden>
+    <div class="panneau vert collant" aria-live="polite">
+      <h2>✓ Le montant saisi équivaut à</h2>
+      <div class="res"><div>En euros<small id="e-EUR-n"></small></div><div class="v" id="e-EUR">—</div></div>
+      <div class="res"><div>En dollars<small id="e-USD-n"></small></div><div class="v" id="e-USD">—</div></div>
+      <div class="res"><div>En livres<small id="e-GBP-n"></small></div><div class="v" id="e-GBP">—</div></div>
+      <p class="message alerte" id="e-message" hidden></p>
+    </div>
+
+    <div class="panneau jaune" style="margin-top:12px">
+      <h2>✎ Tapez un montant dans la ligne de votre choix</h2>
+      <div class="pile" id="lignes-montant"></div>
+    </div>
+
+    <div class="carte">
+      <h2>Taux de change</h2>
+      <p>Les taux ne se mettent pas à jour tout seuls : saisissez ceux du jour, ils sont retenus sur cet appareil. Les taux de départ (1,17 $ et 0,87 £) ne sont que des valeurs d'amorçage.</p>
+      <div class="panneau jaune">
+        <h2>✎ Vous renseignez</h2>
+        <div class="pile" id="lignes-taux"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ 3. TABLE ═══ -->
+  <section class="ecran" id="ecran-table" role="tabpanel" aria-labelledby="onglet-table" hidden>
+    <div class="carte" style="margin-top:0">
+      <h2>Table coefficient ↔ marge</h2>
+      <p>Quel coefficient pour obtenir telle marge ? Touchez une ligne pour la reporter dans le calcul.</p>
+      <div class="table" id="table"></div>
+    </div>
+  </section>
+
+  <!-- ═══ 4. INFOS ═══ -->
+  <section class="ecran" id="ecran-infos" role="tabpanel" aria-labelledby="onglet-infos" hidden>
+    <div class="carte" style="margin-top:0">
+      <h2>Bien lire les résultats</h2>
+      <p class="def">
+        <b>Coefficient</b> = prix de vente ÷ prix d'achat.<br>
+        <b>Marge</b> = (prix de vente − prix d'achat) ÷ prix de vente.<br>
+        Un coefficient de 1,50 donne une marge de <b>33,3 %</b>, pas de 50 %.<br>
+        Tous les prix sont HT.
+      </p>
+      <ul>
+        <li><b>Cadre jaune</b> : ce que vous renseignez. <b>Cadre vert</b> : le résultat, rien à saisir.</li>
+        <li>La ligne que vous tapez pilote les autres ; une ligne « calculé » reprend la main dès que vous y tapez.</li>
+        <li>« ± » donne une marge négative (vente sous le prix d'achat).</li>
+        <li>Renseignez un <b>tarif</b> pour faire apparaître la ligne « Remise sur tarif » : la remise à appliquer au tarif pour obtenir ce prix de vente (un « + » indique une majoration).</li>
+      </ul>
+    </div>
+
+    <div class="carte">
+      <h2>Installer sur l'écran d'accueil</h2>
+      <p>Pour l'ouvrir comme une application, plein écran, avec son icône.</p>
+      <p class="def"><b>iPhone</b> (Safari) : touchez <b>Partager</b> <span aria-hidden="true">⬆︎</span>, puis <b>Sur l'écran d'accueil</b>. Vous pouvez modifier le nom proposé avant de valider (« FDS Calc », par exemple, tient en entier sous l'icône).</p>
+      <p class="def" style="margin-top:8px"><b>Android</b> (Chrome) : menu <b>⋮</b>, puis <b>Installer l'application</b> (ou <b>Ajouter à l'écran d'accueil</b>).</p>
+      <button class="bouton plein" id="installer" type="button" hidden>Installer l'application</button>
+    </div>
+
+    <div class="carte">
+      <h2>Sans réseau, et sans rien envoyer</h2>
+      <p class="def">Après la première ouverture, FDS Calculette fonctionne sans réseau. Tous les calculs se font sur l'appareil : aucun prix, aucune saisie n'est envoyé ni enregistré ailleurs. Seuls les deux taux de change et le mode jour / nuit sont retenus sur l'appareil.</p>
+    </div>
+
+    <div class="carte">
+      <h2>À propos</h2>
+      <p class="def">Tirée de l'onglet « Calcul de marge » de FDS Catalogue (AMDP).<br>
+        <span id="version-texte"></span><br>
+        Code : <a href="https://github.com/amdpdev/fds-calculette" target="_blank" rel="noopener noreferrer">github.com/amdpdev/fds-calculette</a></p>
+      <button class="bouton" id="verifier" type="button">Vérifier les mises à jour</button>
+      <p class="message" id="verifier-message" role="status"></p>
+    </div>
+  </section>
+</main>
+
+<nav class="onglets" role="tablist" aria-label="Écrans">
+  <button type="button" role="tab" id="onglet-marge" data-ecran="marge" aria-selected="true" aria-controls="ecran-marge">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="3" width="15" height="18" rx="2.5"/><path d="M8 7.5h8"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01" stroke-width="2.6"/></svg>Marge</button>
+  <button type="button" role="tab" id="onglet-change" data-ecran="change" aria-selected="false" aria-controls="ecran-change">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h13.5M14 5l3.5 3.5L14 12"/><path d="M20 15.5H6.5M10 12l-3.5 3.5L10 19"/></svg>Change</button>
+  <button type="button" role="tab" id="onglet-table" data-ecran="table" aria-selected="false" aria-controls="ecran-table">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M10 9.5V20"/></svg>Table</button>
+  <button type="button" role="tab" id="onglet-infos" data-ecran="infos" aria-selected="false" aria-controls="ecran-infos">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.2M12 7.8h.01" stroke-width="2.4"/></svg>Infos</button>
+</nav>
+
+<script src="calcul.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
